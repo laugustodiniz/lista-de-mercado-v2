@@ -87,12 +87,12 @@ export default function App() {
     Keyboard.dismiss();
     setInput('');
     const category = await categorize(name);
-    const newItems = [
-      ...items,
-      { id: Date.now().toString(), name, bought: false, category },
-    ];
-    setItems(newItems);
-    saveItems(newItems);
+    const newItem = { id: Date.now().toString(), name, bought: false, category };
+    setItems(prev => {
+      const newItems = [...prev, newItem];
+      saveItems(newItems);
+      return newItems;
+    });
   }
 
   function addMultipleItems(categorizedItems: CategorizedItem[]) {

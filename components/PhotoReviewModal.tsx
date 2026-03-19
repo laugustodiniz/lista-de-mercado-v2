@@ -6,7 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { CategorizedItem } from '../constants/types';
 import { CATEGORY_CONFIG } from '../constants/categories';
@@ -31,6 +31,10 @@ type Props = {
 
 export default function PhotoReviewModal({ visible, items, onConfirm, onCancel }: Props) {
   const [selected, setSelected] = useState<Set<number>>(() => new Set(items.map((_, i) => i)));
+
+  useEffect(() => {
+    setSelected(new Set(items.map((_, i) => i)));
+  }, [items]);
 
   function toggle(index: number) {
     setSelected(prev => {
