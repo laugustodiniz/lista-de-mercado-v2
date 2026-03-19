@@ -6,8 +6,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { CategorizedItem } from '../constants/types';
+import { CATEGORY_CONFIG } from '../constants/categories';
 
 const COLORS = {
   background: '#FAF9F6',
@@ -22,13 +24,17 @@ const COLORS = {
 
 type Props = {
   visible: boolean;
-  items: string[];
-  onConfirm: (selected: string[]) => void;
+  items: CategorizedItem[];
+  onConfirm: (selected: CategorizedItem[]) => void;
   onCancel: () => void;
 };
 
 export default function PhotoReviewModal({ visible, items, onConfirm, onCancel }: Props) {
   const [selected, setSelected] = useState<Set<number>>(() => new Set(items.map((_, i) => i)));
+
+  useEffect(() => {
+    setSelected(new Set(items.map((_, i) => i)));
+  }, [items]);
 
   function toggle(index: number) {
     setSelected(prev => {
@@ -64,22 +70,37 @@ export default function PhotoReviewModal({ visible, items, onConfirm, onCancel }
               data={items}
               keyExtractor={(_, i) => String(i)}
               style={styles.list}
-              renderItem={({ item, index }) => (
-                <Pressable
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                  onPress={() => toggle(index)}
-                >
-                  <Ionicons
-                    name={selected.has(index) ? 'checkmark-circle' : 'ellipse-outline'}
-                    size={24}
-                    color={selected.has(index) ? COLORS.primary : COLORS.textMuted}
-                    style={styles.checkboxIcon}
-                  />
-                  <Text style={[styles.itemText, !selected.has(index) && styles.itemDeselected]}>
-                    {item}
-                  </Text>
-                </Pressable>
-              )}
+              renderItem={({ item, index }) => {
+                const catConfig = CATEGORY_CONFIG[item.category];
+                return (
+                  <Pressable
+                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                    onPress={() => toggle(index)}
+                  >
+                    <Ionicons
+                      name={selected.has(index) ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={24}
+                      color={selected.has(index) ? COLORS.primary : COLORS.textMuted}
+                      style={styles.checkboxIcon}
+                    />
+                    <View style={styles.itemInfo}>
+                      <Text style={[styles.itemText, !selected.has(index) && styles.itemDeselected]}>
+                        {item.name}
+                      </Text>
+                      <View style={[styles.categoryBadge, { backgroundColor: catConfig.color + '20' }]}>
+                        <Ionicons
+                          name={catConfig.icon as keyof typeof Ionicons.glyphMap}
+                          size={12}
+                          color={catConfig.color}
+                        />
+                        <Text style={[styles.categoryText, { color: catConfig.color }]}>
+                          {item.category}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              }}
             />
           )}
 
@@ -172,14 +193,30 @@ const styles = StyleSheet.create({
   checkboxIcon: {
     marginRight: 12,
   },
+  itemInfo: {
+    flex: 1,
+    gap: 4,
+  },
   itemText: {
     fontSize: 16,
     color: COLORS.text,
-    flex: 1,
   },
   itemDeselected: {
     color: COLORS.textMuted,
     textDecorationLine: 'line-through',
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 4,
+  },
+  categoryText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   actions: {
     flexDirection: 'row',

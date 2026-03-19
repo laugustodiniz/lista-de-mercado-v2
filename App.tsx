@@ -4,11 +4,12 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
-  FlatList,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  SectionList,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -17,10 +18,13 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Item } from './constants/types';
+import { Category, CategorizedItem, Item } from './constants/types';
+import { CATEGORY_ORDER, CATEGORY_CONFIG } from './constants/categories';
 import { usePhotoScanner } from './hooks/usePhotoScanner';
 import { useAudioScanner } from './hooks/useAudioScanner';
+import { useCategorizer } from './hooks/useCategorizer';
 import PhotoReviewModal from './components/PhotoReviewModal';
+import CategoryPickerModal from './components/CategoryPickerModal';
 
 const STORAGE_KEY = '@lista_mercado';
 
@@ -45,11 +49,13 @@ const COLORS = {
 export default function App() {
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState('');
-  const [reviewItems, setReviewItems] = useState<string[]>([]);
+  const [reviewItems, setReviewItems] = useState<CategorizedItem[]>([]);
   const [reviewVisible, setReviewVisible] = useState(false);
+  const [editCategoryItem, setEditCategoryItem] = useState<Item | null>(null);
 
   const { scanFromGallery, scanFromCamera, isLoading: photoLoading } = usePhotoScanner();
   const { startRecording, stopRecording, isRecording, isLoading: audioLoading, recordingDuration } = useAudioScanner();
+  const { categorize, isLoading: categorizerLoading } = useCategorizer();
 
   useEffect(() => {
     loadItems();
@@ -58,7 +64,14 @@ export default function App() {
   async function loadItems() {
     try {
       const json = await AsyncStorage.getItem(STORAGE_KEY);
-      if (json) setItems(JSON.parse(json));
+      if (json) {
+        const raw = JSON.parse(json) as Array<Partial<Item> & { id: string; name: string; bought: boolean }>;
+        const migrated = raw.map(item => ({
+          ...item,
+          category: (item.category ?? 'Outros') as Category,
+        }));
+        setItems(migrated);
+      }
     } catch {}
   }
 
@@ -68,25 +81,31 @@ export default function App() {
     } catch {}
   }
 
-  function addItem() {
+  async function addItem() {
     const name = input.trim();
     if (!name) return;
-    const newItems = [
-      ...items,
-      { id: Date.now().toString(), name, bought: false },
-    ];
-    setItems(newItems);
-    saveItems(newItems);
-    setInput('');
     Keyboard.dismiss();
+    setInput('');
+    const category = await categorize(name);
+    const newItem = { id: Date.now().toString(), name, bought: false, category };
+    setItems(prev => {
+      const newItems = [...prev, newItem];
+      saveItems(newItems);
+      return newItems;
+    });
   }
 
-  function addMultipleItems(names: string[]) {
-    if (names.length === 0) return;
+  function addMultipleItems(categorizedItems: CategorizedItem[]) {
+    if (categorizedItems.length === 0) return;
     const now = Date.now();
     const newItems = [
       ...items,
-      ...names.map((name, i) => ({ id: (now + i).toString(), name, bought: false })),
+      ...categorizedItems.map((ci, i) => ({
+        id: (now + i).toString(),
+        name: ci.name,
+        bought: false,
+        category: ci.category,
+      })),
     ];
     setItems(newItems);
     saveItems(newItems);
@@ -104,6 +123,15 @@ export default function App() {
     const newItems = items.filter(item => item.id !== id);
     setItems(newItems);
     saveItems(newItems);
+  }
+
+  function changeItemCategory(id: string, category: Category) {
+    const newItems = items.map(item =>
+      item.id === id ? { ...item, category } : item
+    );
+    setItems(newItems);
+    saveItems(newItems);
+    setEditCategoryItem(null);
   }
 
   async function handleScanPhoto() {
@@ -158,14 +186,65 @@ export default function App() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
-  function handleReviewConfirm(selected: string[]) {
+  function handleReviewConfirm(selected: CategorizedItem[]) {
     setReviewVisible(false);
     addMultipleItems(selected);
   }
 
-  const showLoading = photoLoading || audioLoading;
-  const loadingMessage = audioLoading ? 'Processando áudio...' : 'Analisando imagem...';
+  function formatListForSharing(listItems: Item[]): string {
+    const lines: string[] = ['🛒 Lista de Mercado', ''];
+
+    const grouped = new Map<Category, Item[]>();
+    for (const item of listItems) {
+      const cat = item.category ?? 'Outros';
+      const group = grouped.get(cat);
+      if (group) {
+        group.push(item);
+      } else {
+        grouped.set(cat, [item]);
+      }
+    }
+
+    for (const category of CATEGORY_ORDER) {
+      const categoryItems = grouped.get(category);
+      if (!categoryItems || categoryItems.length === 0) continue;
+
+      const { emoji } = CATEGORY_CONFIG[category];
+      lines.push(`${emoji} ${category}`);
+      for (const item of categoryItems) {
+        const check = item.bought ? '✅' : '⬚';
+        lines.push(`${check} ${item.name}`);
+      }
+      lines.push('');
+    }
+
+    lines.push('Enviado pelo app Lista de Mercado');
+    return lines.join('\n');
+  }
+
+  async function handleShareList() {
+    if (items.length === 0) {
+      Alert.alert('Lista vazia', 'Adicione itens antes de compartilhar.');
+      return;
+    }
+    const message = formatListForSharing(items);
+    await Share.share({ message });
+  }
+
+  const showLoading = photoLoading || audioLoading || categorizerLoading;
+  const loadingMessage = audioLoading
+    ? 'Processando áudio...'
+    : categorizerLoading
+    ? 'Categorizando item...'
+    : 'Analisando imagem...';
   const pending = items.filter(i => !i.bought).length;
+
+  const sections = CATEGORY_ORDER
+    .map(category => ({
+      title: category,
+      data: items.filter(item => item.category === category),
+    }))
+    .filter(section => section.data.length > 0);
 
   return (
     <KeyboardAvoidingView
@@ -190,7 +269,12 @@ export default function App() {
         style={styles.header}
       >
         <View style={styles.headerContent}>
-          <Text style={styles.title}>Lista de Mercado</Text>
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.title}>Lista de Mercado</Text>
+            <Pressable onPress={handleShareList} hitSlop={8}>
+              <Ionicons name="share-outline" size={24} color="#fff" />
+            </Pressable>
+          </View>
           <View style={styles.badgeRow}>
             <View style={styles.badge}>
               <Ionicons name="cart-outline" size={14} color="#fff" />
@@ -202,41 +286,77 @@ export default function App() {
         </View>
       </LinearGradient>
 
-      <FlatList
-        data={items}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [styles.itemRow, pressed && styles.itemRowPressed]}
-            onPress={() => toggleItem(item.id)}
-          >
-            <Ionicons
-              name={item.bought ? 'checkmark-circle' : 'ellipse-outline'}
-              size={26}
-              color={item.bought ? COLORS.primary : COLORS.textMuted}
-              style={styles.checkboxIcon}
-            />
-            <Text style={[styles.itemName, item.bought && styles.itemDone]}>
-              {item.name}
-            </Text>
-            <Pressable
-              onPress={() => deleteItem(item.id)}
-              style={styles.deleteBtn}
-              hitSlop={8}
-            >
-              <Ionicons name="trash-outline" size={20} color={COLORS.danger} />
-            </Pressable>
-          </Pressable>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="basket-outline" size={64} color={COLORS.textMuted} />
-            <Text style={styles.emptyTitle}>Lista vazia</Text>
-            <Text style={styles.emptySubtitle}>Adicione itens usando o campo abaixo,{'\n'}uma foto ou gravação de áudio</Text>
-          </View>
-        }
-      />
+      {items.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="basket-outline" size={64} color={COLORS.textMuted} />
+          <Text style={styles.emptyTitle}>Lista vazia</Text>
+          <Text style={styles.emptySubtitle}>Adicione itens usando o campo abaixo,{'\n'}uma foto ou gravação de áudio</Text>
+        </View>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
+          renderSectionHeader={({ section }) => {
+            const config = CATEGORY_CONFIG[section.title as Category];
+            return (
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconCircle, { backgroundColor: config.color + '20' }]}>
+                  <Ionicons
+                    name={config.icon as keyof typeof Ionicons.glyphMap}
+                    size={16}
+                    color={config.color}
+                  />
+                </View>
+                <Text style={[styles.sectionTitle, { color: config.color }]}>
+                  {section.title}
+                </Text>
+                <Text style={styles.sectionCount}>{section.data.length}</Text>
+              </View>
+            );
+          }}
+          renderItem={({ item }) => {
+            const catConfig = CATEGORY_CONFIG[item.category];
+            return (
+              <Pressable
+                style={({ pressed }) => [styles.itemRow, pressed && styles.itemRowPressed]}
+                onPress={() => toggleItem(item.id)}
+                onLongPress={() => setEditCategoryItem(item)}
+              >
+                <Ionicons
+                  name={item.bought ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={26}
+                  color={item.bought ? COLORS.primary : COLORS.textMuted}
+                  style={styles.checkboxIcon}
+                />
+                <View style={styles.itemContent}>
+                  <Text style={[styles.itemName, item.bought && styles.itemDone]}>
+                    {item.name}
+                  </Text>
+                  <View style={[styles.itemCategoryBadge, { backgroundColor: catConfig.color + '15' }]}>
+                    <Ionicons
+                      name={catConfig.icon as keyof typeof Ionicons.glyphMap}
+                      size={10}
+                      color={catConfig.color}
+                    />
+                    <Text style={[styles.itemCategoryText, { color: catConfig.color }]}>
+                      {item.category}
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => deleteItem(item.id)}
+                  style={styles.deleteBtn}
+                  hitSlop={8}
+                >
+                  <Ionicons name="trash-outline" size={20} color={COLORS.danger} />
+                </Pressable>
+              </Pressable>
+            );
+          }}
+        />
+      )}
 
       {isRecording && (
         <View style={styles.recordingBanner}>
@@ -291,6 +411,13 @@ export default function App() {
         onConfirm={handleReviewConfirm}
         onCancel={() => setReviewVisible(false)}
       />
+
+      <CategoryPickerModal
+        visible={editCategoryItem !== null}
+        current={editCategoryItem?.category ?? 'Outros'}
+        onSelect={category => changeItemCategory(editCategoryItem!.id, category)}
+        onCancel={() => setEditCategoryItem(null)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -338,6 +465,11 @@ const styles = StyleSheet.create({
   headerContent: {
     gap: 8,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -367,8 +499,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
-    marginTop: 80,
+    justifyContent: 'center',
     gap: 8,
   },
   emptyTitle: {
@@ -382,6 +515,30 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 10,
+    gap: 8,
+  },
+  sectionIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
+  sectionCount: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '500',
   },
   itemRow: {
     flexDirection: 'row',
@@ -403,8 +560,11 @@ const styles = StyleSheet.create({
   checkboxIcon: {
     marginRight: 14,
   },
-  itemName: {
+  itemContent: {
     flex: 1,
+    gap: 4,
+  },
+  itemName: {
     fontSize: 16,
     color: COLORS.text,
     fontWeight: '400',
@@ -412,6 +572,19 @@ const styles = StyleSheet.create({
   itemDone: {
     textDecorationLine: 'line-through',
     color: COLORS.textMuted,
+  },
+  itemCategoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3,
+  },
+  itemCategoryText: {
+    fontSize: 10,
+    fontWeight: '500',
   },
   deleteBtn: {
     padding: 6,

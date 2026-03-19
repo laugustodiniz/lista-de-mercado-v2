@@ -1,20 +1,42 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Category, CategorizedItem } from '../constants/types';
+import { VALID_CATEGORIES } from '../constants/categories';
+
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
-const EXTRACTION_PROMPT = `You are a shopping list extractor. Analyze the image and extract items that someone would buy at a supermarket.
+const EXTRACTION_PROMPT = `You are a shopping list extractor for a Brazilian supermarket app.
+Analyze the image and extract items that someone would buy at a supermarket.
 
 Rules:
 - If it's a handwritten or printed list: extract each item exactly as written.
-- If it's a supermarket receipt: extract only product names. Ignore prices, quantities, brand suffixes with sizes (5KG, 1L, 500G), tax lines (ICMS, PIS, COFINS), store name, address, CNPJ, totals, discounts, and payment lines. Shorten names to 2-4 words (e.g. "ARROZ PARBORIZADO TIO JOAO 5KG" becomes "Arroz Parborizado").
-- Output ONLY a valid JSON array of strings. No explanation, no markdown, no code block.
-- Use Title Case in Portuguese.
+- If it's a receipt: extract only product names. Ignore prices, totals, taxes, store info.
+  Shorten names to 2-4 words (e.g. "ARROZ PARBORIZADO TIO JOAO 5KG" becomes "Arroz Parborizado").
+- For each item, assign exactly one category from this list:
+  "Hortifruti", "Carnes e Aves", "Laticínios e Frios", "Padaria", "Mercearia",
+  "Bebidas", "Congelados", "Higiene Pessoal", "Limpeza", "Outros"
+- Use Title Case in Portuguese for item names.
+- Output ONLY a valid JSON array. No explanation, no markdown, no code block.
+- Format: [{ "name": "Item Name", "category": "Category" }, ...]
 - If no items found, return: []
 
-Example: ["Arroz Parborizado", "Feijao Carioca", "Leite Integral"]`;
+Example: [{"name": "Arroz Parborizado", "category": "Mercearia"}, {"name": "Leite Integral", "category": "Laticínios e Frios"}]`;
 
-async function extractItemsFromBase64(base64: string): Promise<string[]> {
+function validateCategory(value: string): Category {
+  return VALID_CATEGORIES.has(value) ? (value as Category) : 'Outros';
+}
+
+function parseCategorizedItems(text: string): CategorizedItem[] {
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  const parsed = JSON.parse(cleaned) as Array<{ name: string; category: string }>;
+  return parsed.map(item => ({
+    name: String(item.name),
+    category: validateCategory(item.category),
+  }));
+}
+
+async function extractItemsFromBase64(base64: string): Promise<CategorizedItem[]> {
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -51,14 +73,13 @@ async function extractItemsFromBase64(base64: string): Promise<string[]> {
 
   const data = await res.json();
   const text: string = data.content?.[0]?.text?.trim() ?? '';
-  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-  return JSON.parse(cleaned) as string[];
+  return parseCategorizedItems(text);
 }
 
 export function usePhotoScanner() {
   const [isLoading, setIsLoading] = useState(false);
 
-  async function scanFromGallery(): Promise<string[] | null> {
+  async function scanFromGallery(): Promise<CategorizedItem[] | null> {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permissão negada', 'Permita o acesso à galeria nas configurações do app.');
@@ -76,7 +97,7 @@ export function usePhotoScanner() {
     return runExtraction(result.assets[0].base64);
   }
 
-  async function scanFromCamera(): Promise<string[] | null> {
+  async function scanFromCamera(): Promise<CategorizedItem[] | null> {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permissão negada', 'Permita o acesso à câmera nas configurações do app.');
@@ -93,8 +114,7 @@ export function usePhotoScanner() {
     return runExtraction(result.assets[0].base64);
   }
 
-  // Retorna null se houve erro (alerta já exibido), [] se vazio, string[] se achou itens
-  async function runExtraction(base64: string): Promise<string[] | null> {
+  async function runExtraction(base64: string): Promise<CategorizedItem[] | null> {
     setIsLoading(true);
     try {
       return await extractItemsFromBase64(base64);
