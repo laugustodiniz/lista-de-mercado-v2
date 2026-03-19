@@ -1,29 +1,43 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { Audio } from 'expo-av';
+import { Category, CategorizedItem } from '../constants/types';
+import { VALID_CATEGORIES } from '../constants/categories';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const WHISPER_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const MAX_DURATION_SEC = 120;
 
-const AUDIO_EXTRACTION_PROMPT = `You are a shopping list extractor. The user dictated shopping items.
-Extract each item mentioned from the transcribed text below.
+const AUDIO_EXTRACTION_PROMPT = `You are a shopping list extractor. The user dictated shopping items in Portuguese.
+Extract each item and assign a category.
+
+Categories (use exactly one of these):
+"Hortifruti", "Carnes e Aves", "Laticínios e Frios", "Padaria", "Mercearia",
+"Bebidas", "Congelados", "Higiene Pessoal", "Limpeza", "Outros"
 
 Rules:
-- Extract each distinct item
 - Ignore filler words, greetings, quantities, prices
-- Use Title Case in Portuguese
-- Output ONLY a valid JSON array of strings. No explanation, no markdown, no code block.
+- Use Title Case in Portuguese for item names
+- Output ONLY a valid JSON array. No explanation, no markdown, no code block.
+- Format: [{ "name": "Item Name", "category": "Category" }, ...]
 - If no items found, return: []
-
-Example: ["Arroz", "Feijão Carioca", "Leite Integral"]
 
 Transcribed text:`;
 
-async function transcribeAudio(uri: string): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+function validateCategory(value: string): Category {
+  return VALID_CATEGORIES.has(value) ? (value as Category) : 'Outros';
+}
 
+function parseCategorizedItems(text: string): CategorizedItem[] {
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  const parsed = JSON.parse(cleaned) as Array<{ name: string; category: string }>;
+  return parsed.map(item => ({
+    name: String(item.name),
+    category: validateCategory(item.category),
+  }));
+}
+
+async function transcribeAudio(uri: string): Promise<string> {
   const formData = new FormData();
   formData.append('file', {
     uri,
@@ -50,7 +64,7 @@ async function transcribeAudio(uri: string): Promise<string> {
   return data.text as string;
 }
 
-async function extractItemsFromText(transcription: string): Promise<string[]> {
+async function extractItemsFromText(transcription: string): Promise<CategorizedItem[]> {
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -77,8 +91,7 @@ async function extractItemsFromText(transcription: string): Promise<string[]> {
 
   const data = await res.json();
   const text: string = data.content?.[0]?.text?.trim() ?? '';
-  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-  return JSON.parse(cleaned) as string[];
+  return parseCategorizedItems(text);
 }
 
 export function useAudioScanner() {
@@ -136,7 +149,7 @@ export function useAudioScanner() {
     }, 1000);
   }
 
-  async function stopRecording(): Promise<string[] | null> {
+  async function stopRecording(): Promise<CategorizedItem[] | null> {
     clearTimer();
 
     const recording = recordingRef.current;
@@ -159,14 +172,12 @@ export function useAudioScanner() {
 
     setIsLoading(true);
     try {
-      // Passo 1: Whisper transcreve o áudio
       const transcription = await transcribeAudio(uri);
 
       if (!transcription.trim()) {
         return [];
       }
 
-      // Passo 2: Claude extrai os itens do texto
       return await extractItemsFromText(transcription);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
