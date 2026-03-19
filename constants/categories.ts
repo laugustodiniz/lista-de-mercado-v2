@@ -27,3 +27,30 @@ export const CATEGORY_CONFIG: Record<Category, { icon: string; color: string; em
 };
 
 export const VALID_CATEGORIES = new Set<string>(CATEGORY_ORDER);
+
+/**
+ * Sanitiza e valida uma string retornada pelo Claude como categoria.
+ * Tenta match exato → match após limpar aspas/markdown → busca fuzzy.
+ * Retorna 'Outros' se nenhuma categoria for identificada.
+ */
+export function parseCategory(raw: string): Category {
+  // Match exato
+  if (VALID_CATEGORIES.has(raw)) {
+    return raw as Category;
+  }
+
+  // Limpar aspas, asteriscos, backticks, espaços extras
+  const sanitized = raw.replace(/['"*`]/g, '').trim();
+  if (VALID_CATEGORIES.has(sanitized)) {
+    return sanitized as Category;
+  }
+
+  // Busca fuzzy: verifica se alguma categoria está contida na resposta
+  const match = CATEGORY_ORDER.find(cat => sanitized.includes(cat));
+  if (match) {
+    return match;
+  }
+
+  console.warn('[parseCategory] categoria não reconhecida:', JSON.stringify(raw));
+  return 'Outros';
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Category } from '../constants/types';
-import { VALID_CATEGORIES } from '../constants/categories';
+import { parseCategory } from '../constants/categories';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -38,11 +38,7 @@ async function categorizeItem(itemName: string): Promise<Category> {
   const data = await res.json();
   const text: string = data.content?.[0]?.text?.trim() ?? '';
 
-  if (VALID_CATEGORIES.has(text)) {
-    return text as Category;
-  }
-
-  return 'Outros';
+  return parseCategory(text);
 }
 
 export function useCategorizer() {
@@ -52,7 +48,8 @@ export function useCategorizer() {
     setIsLoading(true);
     try {
       return await categorizeItem(itemName);
-    } catch {
+    } catch (e) {
+      console.warn('[useCategorizer] erro na API:', e instanceof Error ? e.message : String(e));
       return 'Outros';
     } finally {
       setIsLoading(false);
