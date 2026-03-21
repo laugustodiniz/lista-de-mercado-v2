@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Category, CategorizedItem } from '../constants/types';
-import { VALID_CATEGORIES } from '../constants/categories';
+import { CategorizedItem } from '../constants/types';
+import { parseCategory } from '../constants/categories';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -23,16 +23,12 @@ Rules:
 
 Example: [{"name": "Arroz Parborizado", "category": "Mercearia"}, {"name": "Leite Integral", "category": "Laticínios e Frios"}]`;
 
-function validateCategory(value: string): Category {
-  return VALID_CATEGORIES.has(value) ? (value as Category) : 'Outros';
-}
-
 function parseCategorizedItems(text: string): CategorizedItem[] {
   const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
   const parsed = JSON.parse(cleaned) as Array<{ name: string; category: string }>;
   return parsed.map(item => ({
     name: String(item.name),
-    category: validateCategory(item.category),
+    category: parseCategory(item.category),
   }));
 }
 

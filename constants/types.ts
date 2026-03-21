@@ -10,11 +10,17 @@ export type Category =
   | 'Limpeza'
   | 'Outros';
 
+export type Unit = 'un' | 'kg' | 'g' | 'L' | 'ml';
+
+export const UNIT_OPTIONS: Unit[] = ['un', 'kg', 'g', 'L', 'ml'];
+
 export type Item = {
   id: string;
   name: string;
   bought: boolean;
   category: Category;
+  quantity?: number;
+  unit?: Unit;
 };
 
 export type CategorizedItem = {

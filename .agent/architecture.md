@@ -42,6 +42,12 @@
 **Decisão:** Usar `SectionList` (nativo do React Native) em vez de `FlatList`. Seções derivadas de `items` na renderização, sem estado extra.
 **Consequência:** `ListEmptyComponent` da `SectionList` não renderiza com `sections=[]`. O empty state passa a ser controlado por condicional antes da SectionList.
 
+## ADR-008: Campos opcionais para extensão incremental do tipo Item
+**Status:** Atual (decisão da feature de quantidade/unidade — Fase 1 estimativa de custo)
+**Contexto:** O tipo `Item` precisa de novos campos (`quantity`, `unit`, e futuramente `price`) sem quebrar dados existentes no AsyncStorage.
+**Decisão:** Novos campos são opcionais (`quantity?: number`, `unit?: Unit`). `undefined` significa "não definido pelo usuário" — distinto de um valor default. O `loadItems` usa spread com fallback parcial (mesmo padrão da migração de `category`).
+**Consequência:** Toda a UI deve tratar graciosamente campos undefined (não exibir, não incluir em cálculos). Na Fase 3, `price` seguirá o mesmo padrão.
+
 ---
 
 ## Padrões a seguir em novas features

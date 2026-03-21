@@ -18,7 +18,13 @@
       "Bash(cmd.exe /c \"echo {\"\"tool_input\"\":{\"\"command\"\":\"\"git commit -m test\"\"}} | C:\\\\Users\\\\laugu\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe C:\\\\Users\\\\laugu\\\\OneDrive\\\\Documentos\\\\lista-de-mercado-app\\\\.claude\\\\hooks\\\\validate-commit.py\")",
       "Bash(npx expo:*)",
       "Bash(npm install:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "WebSearch",
+      "Bash(npx tsc:*)",
+      "Bash(npx -p typescript tsc --noEmit)",
+      "Bash(cd \"C:\\\\Users\\\\laugu\\\\OneDrive\\\\Documentos\\\\lista-de-mercado-v2\" && node -e \"require\\('./node_modules/typescript/lib/tsc.js'\\)\" -- --noEmit 2>&1 | head -20)",
+      "Bash(cd \"C:\\\\Users\\\\laugu\\\\OneDrive\\\\Documentos\\\\lista-de-mercado-v2\" && ls node_modules/.bin/tsc* 2>&1; ls node_modules/typescript 2>&1)",
+      "Bash(gh auth:*)"
     ]
   }
 }
