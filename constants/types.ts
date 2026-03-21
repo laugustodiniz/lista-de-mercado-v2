@@ -27,3 +27,23 @@ export type CategorizedItem = {
   name: string;
   category: Category;
 };
+
+export type ReceiptItem = {
+  name: string;
+  originalName: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  totalPrice: number;
+  category: Category;
+};
+
+export type PriceRecord = {
+  id: string;
+  itemName: string;
+  price: number;
+  unit: string;
+  quantity: number;
+  date: string;
+  store?: string;
+};

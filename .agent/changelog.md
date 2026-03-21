@@ -2,6 +2,16 @@
 
 ## Em andamento
 
+### Fase 2 — Scan de Nota Fiscal + Banco de Preços (Estimativa de Custo)
+- Tipo `ReceiptItem` (nome, originalName, quantity, unit, unitPrice, totalPrice, category) em `constants/types.ts`
+- Tipo `PriceRecord` (id, itemName, price, unit, quantity, date, store?) em `constants/types.ts`
+- Hook `useReceiptScanner` — foto de NFC-e → Claude Vision → `ReceiptItem[]`
+- Hook `usePriceHistory` — CRUD do banco de preços pessoal em AsyncStorage (`@historico_precos`)
+- Componente `ReceiptReviewModal` — bottom sheet para revisar itens da nota com preços, categorias, total e campo de loja
+- Nudge banner contextual quando todos os itens estão comprados (sugere fotografar nota fiscal)
+- Integração no `App.tsx` com handlers de scan, confirmação e estado do nudge
+- Loading overlay com mensagem "Analisando nota fiscal..."
+
 ### Fase 1 — Quantidade e Unidade por Item (Estimativa de Custo)
 - Tipo `Unit` (union: un/kg/g/L/ml) e constante `UNIT_OPTIONS` em `constants/types.ts`
 - Campos opcionais `quantity?: number` e `unit?: Unit` no tipo `Item`

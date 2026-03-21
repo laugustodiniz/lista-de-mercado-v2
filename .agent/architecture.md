@@ -48,6 +48,12 @@
 **Decisão:** Novos campos são opcionais (`quantity?: number`, `unit?: Unit`). `undefined` significa "não definido pelo usuário" — distinto de um valor default. O `loadItems` usa spread com fallback parcial (mesmo padrão da migração de `category`).
 **Consequência:** Toda a UI deve tratar graciosamente campos undefined (não exibir, não incluir em cálculos). Na Fase 3, `price` seguirá o mesmo padrão.
 
+## ADR-009: Banco de preços pessoal em chave AsyncStorage separada
+**Status:** Atual (decisão da Fase 2 — scan de nota fiscal)
+**Contexto:** O histórico de preços é um dataset separado da lista de compras — cresce ao longo do tempo, não é apagado ao limpar a lista, e será consultado por features futuras (Fase 3).
+**Decisão:** Usar chave `@historico_precos` separada da `@lista_mercado`. Array de `PriceRecord[]` serializado como JSON. Sem limite de tamanho no MVP.
+**Risco:** AsyncStorage tem limite prático de ~6MB. Para uso doméstico (1-2 compras/semana, ~30 itens cada), o limite não será atingido em anos. Se necessário no futuro, implementar pruning (manter apenas últimos N meses).
+
 ---
 
 ## Padrões a seguir em novas features
