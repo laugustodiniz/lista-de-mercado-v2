@@ -60,6 +60,44 @@ Enviado pelo app Lista de Mercado
 **Prioridade:** Alta — razão valor/esforço excepcional (valor alto + esforço mínimo + alcance amplo)
 **Dependências:** Idealmente após Categorização por Setores (para agrupar por categoria no texto), mas pode ser implementada sem.
 
+### [ALTA] Estimativa de Custo com Banco de Dados Pessoal de Preços
+**Dor:** Usuário não sabe quanto vai gastar antes de ir ao mercado. Sem campo de quantidade, a lista é só uma lista de nomes. Sem histórico de preços, não consegue planejar orçamento nem perceber variações de preço ao longo do tempo.
+
+**Análise de mercado:** Listonic e Out of Milk permitem preço manual por item. Price Book e PricePad exigem digitar preço item a item. **Nenhum concorrente** usa foto de nota fiscal para alimentar banco de dados pessoal de preços automaticamente. Diferencial real do app — combina IA (Claude Vision, ~97% de precisão em recibos) com ciclo virtuoso: quanto mais compra, melhor a estimativa.
+
+**Público impactado:** Todos os usuários — qualquer pessoa que compra em mercado recebe NFC-e. Ciclo natural: comprou → foto da nota → próxima lista já tem estimativa.
+
+**Abordagem em 3 fases:**
+
+#### Fase 1 — Quantidade e Unidade por Item (P, <1 sessão)
+- [ ] Campos opcionais `quantity` (número, default 1) e `unit` (un/kg/L/g/ml) no tipo `Item`
+- [ ] UI: edição inline de quantidade e unidade no card do item
+- [ ] Texto compartilhado (share) inclui quantidade/unidade quando preenchido (ex: "⬚ Arroz (2kg)")
+- [ ] Retrocompatível — itens existentes funcionam sem esses campos
+
+#### Fase 2 — Scan de Nota Fiscal + Banco de Preços (G, 3+ sessões)
+- [ ] Botão "Registrar Compra" (foto da NFC-e) — reutiliza infra de câmera/galeria existente
+- [ ] Claude Vision extrai itens da nota fiscal com: nome, quantidade, unidade, valor unitário, valor total
+- [ ] Modal de revisão dos itens extraídos (reutiliza padrão do PhotoReviewModal)
+- [ ] Persiste histórico de preços por item normalizado (AsyncStorage, chave `@historico_precos`)
+- [ ] Modelo: `{ itemName: string, price: number, unit: string, quantity: number, date: string, store?: string }`
+- [ ] Match fuzzy entre nome do item na nota e nome na lista (ex: "BANANA PRATA KG" → "Banana")
+- [ ] **Nudge contextual:** quando todos os itens da lista estiverem marcados como comprados, exibir banner/card sugerindo ao usuário tirar foto da nota fiscal para registrar os gastos (ex: "Compras feitas! Quer tirar foto da nota fiscal? Assim estimamos o custo da próxima lista 📸"). Deve ser dispensável e não bloquear o uso.
+- [ ] Usuário pode dispensar o nudge (não exibir novamente naquela sessão)
+
+#### Fase 3 — Estimativa Automática de Custo (M, 1-2 sessões)
+- [ ] Ao adicionar item na lista, busca último preço no histórico pessoal e preenche `price` automaticamente
+- [ ] Total estimado da lista no header (soma de `price × quantity` dos itens com preço)
+- [ ] Itens sem preço no histórico mostram "—" e não entram no total
+- [ ] Indicador visual de confiança (ex: "baseado em 5 compras" vs. "primeira compra")
+- [ ] Campo `price` editável manualmente (override da estimativa)
+
+**Fora do MVP:** comparação entre supermercados, gráfico de evolução de preço, alerta de preço acima da média, leitura do QR code da NFC-e (em vez de foto).
+
+**Esforço total:** G (grande — 3+ sessões somando as 3 fases). Mas cada fase entrega valor independente.
+**Prioridade:** Alta — diferencial de mercado real (nenhum concorrente faz), ciclo virtuoso de dados, viabilidade técnica comprovada (Claude Vision já é usado no app + ~97% precisão em recibos).
+**Dependências:** Fase 1 não tem dependências. Fase 2 depende de Fase 1. Fase 3 depende de Fase 2.
+
 ### [MÉDIA] Salvar Listas e Histórico de Compras
 **Dor:** Lista única e efêmera — ao terminar as compras, tudo desaparece. ~70% dos itens de mercado são recorrentes, mas o usuário recria a lista toda semana. Não consegue consultar compras passadas nem reutilizar listas temáticas (churrasco, festa, compras do mês).
 

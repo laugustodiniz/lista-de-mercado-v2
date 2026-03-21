@@ -2,6 +2,16 @@
 
 ## Em andamento
 
+### Fase 1 — Quantidade e Unidade por Item (Estimativa de Custo)
+- Tipo `Unit` (union: un/kg/g/L/ml) e constante `UNIT_OPTIONS` em `constants/types.ts`
+- Campos opcionais `quantity?: number` e `unit?: Unit` no tipo `Item`
+- Função `updateItemDetails` para atualizar quantidade/unidade de um item
+- Edição inline de quantidade/unidade no card do item (input numérico + selector de unidade)
+- Badge de quantidade ao lado do badge de categoria (ex: "2kg")
+- Botão discreto "+ qtd" quando quantidade não definida
+- Texto compartilhado (share) inclui quantidade/unidade (ex: "⬚ Arroz (2kg)")
+- Retrocompatível — itens existentes sem quantity/unit funcionam normalmente
+
 ### Categorização por Setores do Mercado
 - Tipo `Category` (union com 10 categorias de mercado brasileiro) em `constants/types.ts`
 - Tipo `CategorizedItem` para retorno dos hooks de scanner

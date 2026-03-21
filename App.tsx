@@ -18,7 +18,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Category, CategorizedItem, Item } from './constants/types';
+import { Category, CategorizedItem, Item, Unit, UNIT_OPTIONS } from './constants/types';
 import { CATEGORY_ORDER, CATEGORY_CONFIG } from './constants/categories';
 import { usePhotoScanner } from './hooks/usePhotoScanner';
 import { useAudioScanner } from './hooks/useAudioScanner';
@@ -52,6 +52,9 @@ export default function App() {
   const [reviewItems, setReviewItems] = useState<CategorizedItem[]>([]);
   const [reviewVisible, setReviewVisible] = useState(false);
   const [editCategoryItem, setEditCategoryItem] = useState<Item | null>(null);
+  const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null);
+  const [editQtyValue, setEditQtyValue] = useState('');
+  const [editUnitValue, setEditUnitValue] = useState<Unit>('un');
 
   const { scanFromGallery, scanFromCamera, isLoading: photoLoading } = usePhotoScanner();
   const { startRecording, stopRecording, isRecording, isLoading: audioLoading, recordingDuration } = useAudioScanner();
@@ -134,6 +137,39 @@ export default function App() {
     setEditCategoryItem(null);
   }
 
+  function updateItemDetails(id: string, quantity: number | undefined, unit: Unit | undefined) {
+    const newItems = items.map(item =>
+      item.id === id ? { ...item, quantity, unit } : item
+    );
+    setItems(newItems);
+    saveItems(newItems);
+  }
+
+  function startEditingQuantity(item: Item) {
+    if (editingQuantityId && editingQuantityId !== item.id) {
+      confirmQuantityEdit();
+    }
+    setEditingQuantityId(item.id);
+    setEditQtyValue(item.quantity !== undefined ? item.quantity.toString() : '1');
+    setEditUnitValue(item.unit ?? 'un');
+  }
+
+  function confirmQuantityEdit() {
+    if (!editingQuantityId) return;
+    const parsed = parseFloat(editQtyValue);
+    if (editQtyValue === '' || isNaN(parsed) || parsed <= 0) {
+      updateItemDetails(editingQuantityId, undefined, undefined);
+    } else {
+      updateItemDetails(editingQuantityId, parsed, editUnitValue);
+    }
+    setEditingQuantityId(null);
+  }
+
+  function removeQuantity(id: string) {
+    updateItemDetails(id, undefined, undefined);
+    setEditingQuantityId(null);
+  }
+
   async function handleScanPhoto() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -213,7 +249,10 @@ export default function App() {
       lines.push(`${emoji} ${category}`);
       for (const item of categoryItems) {
         const check = item.bought ? '✅' : '⬚';
-        lines.push(`${check} ${item.name}`);
+        const qtyStr = item.quantity != null && item.unit
+          ? ` (${item.quantity}${item.unit})`
+          : '';
+        lines.push(`${check} ${item.name}${qtyStr}`);
       }
       lines.push('');
     }
@@ -318,41 +357,102 @@ export default function App() {
           }}
           renderItem={({ item }) => {
             const catConfig = CATEGORY_CONFIG[item.category];
+            const isEditingQty = editingQuantityId === item.id;
             return (
-              <Pressable
-                style={({ pressed }) => [styles.itemRow, pressed && styles.itemRowPressed]}
-                onPress={() => toggleItem(item.id)}
-                onLongPress={() => setEditCategoryItem(item)}
-              >
-                <Ionicons
-                  name={item.bought ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={26}
-                  color={item.bought ? COLORS.primary : COLORS.textMuted}
-                  style={styles.checkboxIcon}
-                />
-                <View style={styles.itemContent}>
-                  <Text style={[styles.itemName, item.bought && styles.itemDone]}>
-                    {item.name}
-                  </Text>
-                  <View style={[styles.itemCategoryBadge, { backgroundColor: catConfig.color + '15' }]}>
-                    <Ionicons
-                      name={catConfig.icon as keyof typeof Ionicons.glyphMap}
-                      size={10}
-                      color={catConfig.color}
-                    />
-                    <Text style={[styles.itemCategoryText, { color: catConfig.color }]}>
-                      {item.category}
-                    </Text>
-                  </View>
-                </View>
+              <View>
                 <Pressable
-                  onPress={() => deleteItem(item.id)}
-                  style={styles.deleteBtn}
-                  hitSlop={8}
+                  style={({ pressed }) => [styles.itemRow, isEditingQty && styles.itemRowEditing, pressed && !isEditingQty && styles.itemRowPressed]}
+                  onPress={() => { if (!isEditingQty) toggleItem(item.id); }}
+                  onLongPress={() => { if (!isEditingQty) setEditCategoryItem(item); }}
                 >
-                  <Ionicons name="trash-outline" size={20} color={COLORS.danger} />
+                  <Ionicons
+                    name={item.bought ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={26}
+                    color={item.bought ? COLORS.primary : COLORS.textMuted}
+                    style={styles.checkboxIcon}
+                  />
+                  <View style={styles.itemContent}>
+                    <Text style={[styles.itemName, item.bought && styles.itemDone]}>
+                      {item.name}
+                    </Text>
+                    <View style={styles.itemBadgeRow}>
+                      <View style={[styles.itemCategoryBadge, { backgroundColor: catConfig.color + '15' }]}>
+                        <Ionicons
+                          name={catConfig.icon as keyof typeof Ionicons.glyphMap}
+                          size={10}
+                          color={catConfig.color}
+                        />
+                        <Text style={[styles.itemCategoryText, { color: catConfig.color }]}>
+                          {item.category}
+                        </Text>
+                      </View>
+                      {item.quantity != null && item.unit ? (
+                        <Pressable
+                          onPress={() => startEditingQuantity(item)}
+                          style={styles.quantityBadge}
+                          hitSlop={4}
+                        >
+                          <Ionicons name="scale-outline" size={10} color={COLORS.primaryDark} />
+                          <Text style={styles.quantityBadgeText}>
+                            {item.quantity}{item.unit}
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() => startEditingQuantity(item)}
+                          style={styles.addQuantityBtn}
+                          hitSlop={4}
+                        >
+                          <Ionicons name="add-circle-outline" size={10} color={COLORS.textMuted} />
+                          <Text style={styles.addQuantityText}>qtd</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                  <Pressable
+                    onPress={() => deleteItem(item.id)}
+                    style={styles.deleteBtn}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={COLORS.danger} />
+                  </Pressable>
                 </Pressable>
-              </Pressable>
+                {isEditingQty && (
+                  <View style={styles.quantityEditRow}>
+                    <TextInput
+                      style={styles.quantityInput}
+                      value={editQtyValue}
+                      onChangeText={setEditQtyValue}
+                      keyboardType="decimal-pad"
+                      placeholder="Qtd"
+                      placeholderTextColor={COLORS.textMuted}
+                      autoFocus
+                      selectTextOnFocus
+                    />
+                    <View style={styles.unitSelector}>
+                      {UNIT_OPTIONS.map(u => (
+                        <Pressable
+                          key={u}
+                          style={[styles.unitBtn, editUnitValue === u && styles.unitBtnActive]}
+                          onPress={() => setEditUnitValue(u)}
+                        >
+                          <Text style={[styles.unitBtnText, editUnitValue === u && styles.unitBtnTextActive]}>
+                            {u}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <Pressable onPress={confirmQuantityEdit} style={styles.confirmQtyBtn} hitSlop={4}>
+                      <Ionicons name="checkmark-circle" size={28} color={COLORS.primary} />
+                    </Pressable>
+                    {item.quantity != null && (
+                      <Pressable onPress={() => removeQuantity(item.id)} style={styles.removeQtyBtn} hitSlop={4}>
+                        <Ionicons name="close-circle" size={28} color={COLORS.danger} />
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+              </View>
             );
           }}
         />
@@ -573,6 +673,11 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: COLORS.textMuted,
   },
+  itemBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   itemCategoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -585,6 +690,97 @@ const styles = StyleSheet.create({
   itemCategoryText: {
     fontSize: 10,
     fontWeight: '500',
+  },
+  quantityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3,
+  },
+  quantityBadgeText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: COLORS.primaryDark,
+  },
+  addQuantityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    gap: 2,
+  },
+  addQuantityText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: COLORS.textMuted,
+  },
+  itemRowEditing: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    marginBottom: 0,
+  },
+  quantityEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    gap: 8,
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  quantityInput: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
+    color: COLORS.text,
+    width: 56,
+    textAlign: 'center',
+  },
+  unitSelector: {
+    flexDirection: 'row',
+    flex: 1,
+    gap: 4,
+  },
+  unitBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: COLORS.inputBg,
+  },
+  unitBtnActive: {
+    backgroundColor: COLORS.primary,
+  },
+  unitBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.textLight,
+  },
+  unitBtnTextActive: {
+    color: '#fff',
+  },
+  confirmQtyBtn: {
+    padding: 2,
+  },
+  removeQtyBtn: {
+    padding: 2,
   },
   deleteBtn: {
     padding: 6,
