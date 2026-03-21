@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Alert } from 'react-native';
 import { Category } from '../constants/types';
 import { parseCategory } from '../constants/categories';
 
@@ -12,10 +13,16 @@ Given an item name, return ONLY one of these exact category strings (in Portugue
 Return ONLY the category string. No explanation, no quotes, no markdown.`;
 
 async function categorizeItem(itemName: string): Promise<Category> {
+  const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
+
+  if (!apiKey || apiKey === 'cole_sua_chave_aqui') {
+    throw new Error('API key não configurada. Crie um arquivo .env com EXPO_PUBLIC_ANTHROPIC_KEY.');
+  }
+
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
-      'x-api-key': process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '',
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
     },
@@ -32,7 +39,8 @@ async function categorizeItem(itemName: string): Promise<Category> {
   });
 
   if (!res.ok) {
-    throw new Error(`${res.status}`);
+    const body = await res.text().catch(() => '');
+    throw new Error(`API retornou ${res.status}: ${body.slice(0, 200)}`);
   }
 
   const data = await res.json();
@@ -49,7 +57,9 @@ export function useCategorizer() {
     try {
       return await categorizeItem(itemName);
     } catch (e) {
-      console.warn('[useCategorizer] erro na API:', e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[useCategorizer] erro na API:', msg);
+      Alert.alert('Erro na categorização', msg);
       return 'Outros';
     } finally {
       setIsLoading(false);
