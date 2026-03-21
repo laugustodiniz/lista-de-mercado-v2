@@ -1,13 +1,32 @@
 # QA Report — Lista de Mercado v2
 
 ## Bugs abertos
-_Nenhum bug registrado._
+_Nenhum bug crítico registrado._
+
+### Menores (não bloqueiam)
+1. **Import duplicado de `ReceiptItem`** em `App.tsx` (linhas 21 e 31) — remover a linha 31 e adicionar ao import existente da linha 21.
+2. **`handleReceiptConfirm` sem try/catch** — se `saveReceipt` falhar, o modal já foi fechado e o alerta de sucesso não aparece. Envolver em try/catch com Alert de erro.
+3. **`useEffect` com `pending` fora de posição** — `App.tsx:333-335` está entre constantes derivadas e JSX, deveria estar agrupado com os outros hooks/effects no topo do componente.
 
 ## Aprovações
+- **Fase 2: Scan de Nota Fiscal + Banco de Preços** — aprovado com ressalvas em 2026-03-20
 - **Compartilhar Lista via WhatsApp / Share Sheet** — aprovado em 2026-03-19
 - **Categorização por Setores do Mercado** — aprovado com ressalvas em 2026-03-19, bugs corrigidos
 
 ## Histórico de revisões
+
+### 2026-03-20 — Fase 2: Scan de Nota Fiscal + Banco de Preços
+**Veredito:** ⚠️ APROVADO COM RESSALVAS
+**Arquivos revisados:** `constants/types.ts`, `hooks/useReceiptScanner.ts`, `hooks/usePriceHistory.ts`, `components/ReceiptReviewModal.tsx`, `App.tsx`
+**Critérios de aceite:** 10/10 atendidos
+**Regressões:** 0
+
+**Bugs encontrados:**
+1. **(Cosmético) Import duplicado** — `ReceiptItem` importado duas vezes em `App.tsx` (linhas 21 e 31). Funciona mas é código morto.
+2. **(Baixo) `handleReceiptConfirm` sem try/catch** — se `saveReceipt` falhar, modal já fechou e o Alert de sucesso não aparece. Recomendado envolver em try/catch.
+3. **(Cosmético) `useEffect` fora de posição** — `useEffect(() => { if (pending > 0) setNudgeDismissed(false); }, [pending])` em `App.tsx:333` está entre constantes e JSX, deveria estar com os outros hooks no topo.
+
+**Observação:** Nenhum bug é bloqueante. Feature completa e funcional.
 
 ### 2026-03-20 — Fase 1: Quantidade e Unidade por Item
 **Veredito:** ⚠️ APROVADO COM RESSALVAS

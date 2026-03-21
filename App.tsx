@@ -18,13 +18,16 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Category, CategorizedItem, Item, Unit, UNIT_OPTIONS } from './constants/types';
+import { Category, CategorizedItem, Item, ReceiptItem, Unit, UNIT_OPTIONS } from './constants/types';
 import { CATEGORY_ORDER, CATEGORY_CONFIG } from './constants/categories';
 import { usePhotoScanner } from './hooks/usePhotoScanner';
 import { useAudioScanner } from './hooks/useAudioScanner';
 import { useCategorizer } from './hooks/useCategorizer';
+import { useReceiptScanner } from './hooks/useReceiptScanner';
+import { usePriceHistory } from './hooks/usePriceHistory';
 import PhotoReviewModal from './components/PhotoReviewModal';
 import CategoryPickerModal from './components/CategoryPickerModal';
+import ReceiptReviewModal from './components/ReceiptReviewModal';
 
 const STORAGE_KEY = '@lista_mercado';
 
@@ -55,14 +58,25 @@ export default function App() {
   const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null);
   const [editQtyValue, setEditQtyValue] = useState('');
   const [editUnitValue, setEditUnitValue] = useState<Unit>('un');
+  const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
+  const [receiptReviewVisible, setReceiptReviewVisible] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
   const { scanFromGallery, scanFromCamera, isLoading: photoLoading } = usePhotoScanner();
   const { startRecording, stopRecording, isRecording, isLoading: audioLoading, recordingDuration } = useAudioScanner();
   const { categorize, isLoading: categorizerLoading } = useCategorizer();
+  const { scanReceiptFromGallery, scanReceiptFromCamera, isLoading: receiptLoading } = useReceiptScanner();
+  const { saveReceipt } = usePriceHistory();
 
   useEffect(() => {
     loadItems();
   }, []);
+
+  const pending = items.filter(i => !i.bought).length;
+
+  useEffect(() => {
+    if (pending > 0) setNudgeDismissed(false);
+  }, [pending]);
 
   async function loadItems() {
     try {
@@ -227,6 +241,51 @@ export default function App() {
     addMultipleItems(selected);
   }
 
+  function handleScanReceipt() {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Cancelar', 'Galeria de fotos', 'Tirar foto'], cancelButtonIndex: 0 },
+        async buttonIndex => {
+          if (buttonIndex === 1) await runReceiptScan('gallery');
+          if (buttonIndex === 2) await runReceiptScan('camera');
+        }
+      );
+    } else {
+      Alert.alert('Registrar nota fiscal', 'Escolha uma opção', [
+        { text: 'Galeria de fotos', onPress: () => runReceiptScan('gallery') },
+        { text: 'Tirar foto', onPress: () => runReceiptScan('camera') },
+        { text: 'Cancelar', style: 'cancel' },
+      ]);
+    }
+  }
+
+  async function runReceiptScan(source: 'gallery' | 'camera') {
+    const extracted = source === 'gallery'
+      ? await scanReceiptFromGallery()
+      : await scanReceiptFromCamera();
+    if (extracted === null) return;
+    if (extracted.length > 0) {
+      setReceiptItems(extracted);
+      setReceiptReviewVisible(true);
+    } else {
+      Alert.alert('Nenhum item encontrado', 'Não foi possível identificar itens na nota fiscal.');
+    }
+  }
+
+  async function handleReceiptConfirm(selected: ReceiptItem[], store: string) {
+    setReceiptReviewVisible(false);
+    try {
+      await saveReceipt(selected, store || undefined);
+      Alert.alert(
+        'Preços registrados!',
+        `${selected.length} ${selected.length === 1 ? 'item salvo' : 'itens salvos'} no seu histórico de preços.`
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('Erro ao salvar preços', msg);
+    }
+  }
+
   function formatListForSharing(listItems: Item[]): string {
     const lines: string[] = ['🛒 Lista de Mercado', ''];
 
@@ -270,13 +329,15 @@ export default function App() {
     await Share.share({ message });
   }
 
-  const showLoading = photoLoading || audioLoading || categorizerLoading;
-  const loadingMessage = audioLoading
+  const showLoading = photoLoading || audioLoading || categorizerLoading || receiptLoading;
+  const loadingMessage = receiptLoading
+    ? 'Analisando nota fiscal...'
+    : audioLoading
     ? 'Processando áudio...'
     : categorizerLoading
     ? 'Categorizando item...'
     : 'Analisando imagem...';
-  const pending = items.filter(i => !i.bought).length;
+  const showNudge = items.length > 0 && pending === 0 && !nudgeDismissed;
 
   const sections = CATEGORY_ORDER
     .map(category => ({
@@ -467,6 +528,30 @@ export default function App() {
         </View>
       )}
 
+      {showNudge && (
+        <View style={styles.nudgeBanner}>
+          <View style={styles.nudgeContent}>
+            <Ionicons name="receipt-outline" size={20} color={COLORS.primaryDark} />
+            <View style={styles.nudgeTextContainer}>
+              <Text style={styles.nudgeTitle}>Compras feitas!</Text>
+              <Text style={styles.nudgeSubtitle}>
+                Tire foto da nota fiscal para estimar o custo da próxima lista.
+              </Text>
+            </View>
+            <Pressable onPress={() => setNudgeDismissed(true)} hitSlop={8}>
+              <Ionicons name="close" size={18} color={COLORS.textMuted} />
+            </Pressable>
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.nudgeButton, pressed && styles.actionBtnPressed]}
+            onPress={handleScanReceipt}
+          >
+            <Ionicons name="camera-outline" size={16} color="#fff" />
+            <Text style={styles.nudgeButtonText}>Fotografar nota</Text>
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -517,6 +602,13 @@ export default function App() {
         current={editCategoryItem?.category ?? 'Outros'}
         onSelect={category => changeItemCategory(editCategoryItem!.id, category)}
         onCancel={() => setEditCategoryItem(null)}
+      />
+
+      <ReceiptReviewModal
+        visible={receiptReviewVisible}
+        items={receiptItems}
+        onConfirm={handleReceiptConfirm}
+        onCancel={() => setReceiptReviewVisible(false)}
       />
     </KeyboardAvoidingView>
   );
@@ -852,6 +944,47 @@ const styles = StyleSheet.create({
   recordingText: {
     color: COLORS.danger,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  nudgeBanner: {
+    backgroundColor: COLORS.primary + '12',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+  },
+  nudgeContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  nudgeTextContainer: {
+    flex: 1,
+    gap: 2,
+  },
+  nudgeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  nudgeSubtitle: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    lineHeight: 17,
+  },
+  nudgeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  nudgeButtonText: {
+    color: '#fff',
+    fontSize: 13,
     fontWeight: '600',
   },
 });
