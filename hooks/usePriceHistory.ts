@@ -1,8 +1,31 @@
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PriceRecord, ReceiptItem } from '../constants/types';
+import { PriceEstimate, PriceRecord, ReceiptItem } from '../constants/types';
 
 const PRICE_HISTORY_KEY = '@historico_precos';
+
+// Tokens normalizados: sem acento, minúsculos, sem plural simples e sem palavras curtas (de, do, com).
+function tokenize(name: string): string[] {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[^a-z0-9 ]/g, '')
+    .split(/\s+/)
+    .filter(t => t.length > 2)
+    .map(t => t.replace(/s$/, ''));
+}
+
+// "Banana" casa com "Banana Prata": os tokens do nome menor precisam estar todos no maior.
+function namesMatch(a: string, b: string): boolean {
+  const tokensA = tokenize(a);
+  const tokensB = tokenize(b);
+  if (tokensA.length === 0 || tokensB.length === 0) return false;
+  const [shorter, longer] = tokensA.length <= tokensB.length
+    ? [tokensA, tokensB]
+    : [tokensB, tokensA];
+  return shorter.every(t => longer.includes(t));
+}
 
 export function usePriceHistory() {
   const [isLoading, setIsLoading] = useState(false);
@@ -41,19 +64,21 @@ export function usePriceHistory() {
     }
   }
 
-  async function getLastPrice(itemName: string): Promise<PriceRecord | null> {
+  async function getPriceEstimate(itemName: string): Promise<PriceEstimate | null> {
     const history = await getAllHistory();
-    const normalized = itemName.trim().toLowerCase();
-
-    const matches = history.filter(
-      r => r.itemName.trim().toLowerCase() === normalized
-    );
-
+    const matches = history.filter(r => namesMatch(r.itemName, itemName));
     if (matches.length === 0) return null;
 
     matches.sort((a, b) => b.date.localeCompare(a.date));
-    return matches[0];
+    const latest = matches[0];
+    return {
+      price: latest.price,
+      unit: latest.unit,
+      date: latest.date,
+      store: latest.store,
+      count: matches.length,
+    };
   }
 
-  return { saveReceipt, getLastPrice, getAllHistory, isLoading };
+  return { saveReceipt, getPriceEstimate, getAllHistory, isLoading };
 }

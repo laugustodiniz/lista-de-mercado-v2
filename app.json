@@ -12,7 +12,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.laugustodiniz.listademercadoapp"
     },
     "android": {
       "adaptiveIcon": {
@@ -28,7 +29,20 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app acessa suas fotos para importar listas escritas à mão e notas fiscais.",
+          "cameraPermission": "O app usa a câmera para fotografar listas e notas fiscais."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "O app usa o microfone para você ditar os itens da sua lista de compras."
+        }
+      ]
     ],
     "extra": {
       "eas": {
