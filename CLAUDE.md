@@ -6,15 +6,14 @@ App mobile de lista de compras construído com React Native + Expo. Projeto de a
 **Objetivo principal:** Aprender Claude Code usando o desenvolvimento do app como veículo de aprendizado.
 
 ## Stack técnica
-- **Framework:** React Native 0.83 com Expo 55
+- **Framework:** React Native 0.81 com Expo 54
 - **Linguagem:** TypeScript
-- **Teste no dispositivo:** Expo Go (Android)
-- **Controle de versão:** Git + GitHub (`laugustodiniz/lista-de-mercado-app`)
+- **Teste no dispositivo:** Expo Go (Android e iOS)
+- **Controle de versão:** Git + GitHub
 
 ## Comandos essenciais
 ```bash
 # Rodar o app (gera QR code para Expo Go)
-cd "C:\Users\laugu\OneDrive\Documentos\lista-de-mercado-app"
 npm start
 
 # Instalar nova dependência
@@ -36,13 +35,15 @@ constants/           # Tipos TypeScript e constantes
 assets/              # Imagens e ícones
 ```
 
-## Funcionalidades planejadas
-- [x] Projeto inicializado
-- [ ] Tela principal com lista de itens
-- [ ] Adicionar item
-- [ ] Marcar item como comprado
-- [ ] Deletar item
-- [ ] Persistência local com AsyncStorage
+## Funcionalidades
+- [x] Lista de compras (adicionar, marcar como comprado, deletar) com AsyncStorage
+- [x] Importação por foto e por áudio (Claude Vision + Whisper)
+- [x] Categorização por setores do mercado (auto via Claude)
+- [x] Compartilhar lista via share sheet
+- [x] Quantidade/unidade por item e scan de nota fiscal (banco de preços pessoal)
+- [x] Estimativa automática de custo (preço do histórico + total estimado no header)
+
+Backlog priorizado e documentação viva em `.agent/` (roadmap, changelog, contexto).
 
 ## Convenções de código
 - Componentes: PascalCase (ex: `ItemCard.tsx`)

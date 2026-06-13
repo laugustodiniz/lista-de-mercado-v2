@@ -21,6 +21,7 @@ export type Item = {
   category: Category;
   quantity?: number;
   unit?: Unit;
+  price?: number; // preço unitário em R$ — estimado do histórico ou editado manualmente
 };
 
 export type CategorizedItem = {
@@ -46,4 +47,12 @@ export type PriceRecord = {
   quantity: number;
   date: string;
   store?: string;
+};
+
+export type PriceEstimate = {
+  price: number; // preço unitário da compra mais recente que casou com o nome
+  unit: string;
+  date: string;
+  store?: string;
+  count: number; // quantas compras embasam a estimativa (indicador de confiança)
 };
