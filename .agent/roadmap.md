@@ -2,101 +2,32 @@
 
 ## Em desenvolvimento
 
-### [ALTA] Categorização por Setores do Mercado
-**Plano técnico:** `.agent/feature-categorizacao.md`
+(vazio)
 
 ## Backlog
 
-### ~~[ALTA] Categorização por Setores do Mercado~~
-**Dor:** Lista linear força o usuário a ir e voltar no mercado. Falta organização por setor (hortifruti, carnes, laticínios, etc.).
+### [ALTA] Backend proxy para chaves de API (pré-requisito de loja)
+**Dor:** As chamadas a Claude e Whisper usam `EXPO_PUBLIC_ANTHROPIC_KEY` embutida no bundle do app. Qualquer pessoa pode extrair a chave de um APK/IPA publicado e gastar a cota do dono do app. Bloqueia distribuição pública na loja.
 
-**Análise de mercado:** Todos os concorrentes (AnyList, Bring!, OurGroceries, Listonic) têm esta feature. Todos usam dicionário ou regras fixas para auto-categorização. Nosso diferencial: Claude auto-categoriza com IA real, mais precisa para itens em português e itens incomuns.
-
-**Público impactado:** Todos os usuários que compram em mercado físico.
-
-**Critérios de aceite (MVP):**
-- [ ] Campo `category: string` opcional adicionado ao tipo `Item` (retrocompatível — itens antigos ficam em "Outros")
-- [ ] 10 categorias padrão de mercado brasileiro: Hortifruti, Carnes e Aves, Laticínios e Frios, Padaria, Mercearia, Bebidas, Congelados, Higiene Pessoal, Limpeza, Outros
-- [ ] Ao adicionar item por texto, Claude auto-categoriza o item
-- [ ] Ao importar por foto ou áudio, Claude categoriza cada item durante a extração
-- [ ] Lista agrupa itens visualmente por categoria (seções com header)
-- [ ] Usuário pode alterar manualmente a categoria (tap no card → picker)
-
-**Fora do MVP:** customização por loja, reordenação de categorias, memória de categoria por nome de item.
+**Abordagem sugerida:** função serverless mínima (Cloudflare Workers / Vercel) que recebe a requisição do app, injeta a chave do lado do servidor e repassa para a API. Opcional: rate limiting por dispositivo.
 
 **Esforço:** M (1-2 sessões)
-**Dependências:** Nenhuma
+**Dependências:** Nenhuma. Deve ser concluído **antes** do submit às lojas.
 
-### [ALTA] Compartilhar Lista via WhatsApp / Share Sheet
-**Plano técnico:** `.agent/feature-compartilhar-lista.md`
-**Dor:** Quem compra para a casa precisa enviar a lista para outra pessoa (cônjuge, colega). Hoje teria que copiar item por item ou tirar print. WhatsApp é canal universal no Brasil (99% dos smartphones).
+### [ALTA] Publicação nas lojas (App Store + Play Store)
+**Dor:** App só roda via Expo Go hoje. O objetivo é distribuição fácil para iOS e Android — pode ser pago.
 
-**Análise de mercado:** AnyList envia texto puro via share sheet. Bring! e Listonic enviam links (exigem app instalado). OurGroceries só compartilha via convite por email. Nosso approach: texto formatado legível direto no WhatsApp, sem exigir app do destinatário.
+**Checklist de preparação:**
+- [x] `bundleIdentifier` iOS e `package` Android configurados no `app.json`
+- [x] Strings de permissão iOS (câmera, galeria, microfone) via config plugins
+- [ ] Backend proxy de API no ar (item acima — bloqueador)
+- [ ] Contas de desenvolvedor (Apple US$ 99/ano, Google US$ 25 única)
+- [ ] `eas build --platform all --profile production`
+- [ ] `eas submit` configurado em `eas.json` (ascAppId / serviceAccountKeyPath)
+- [ ] Screenshots, descrição da loja, política de privacidade (obrigatória — app usa câmera/microfone)
 
-**Público impactado:** Todos os usuários — compras de mercado são inerentemente compartilhadas.
-
-**Critérios de aceite (MVP):**
-- [ ] Botão "Compartilhar" visível na tela principal (header ou FAB)
-- [ ] Gera texto formatado da lista agrupado por categoria (se disponível) ou lista simples
-- [ ] Itens comprados com ✅, não comprados com ⬚
-- [ ] Abre share sheet nativa do Android (`Share` API do React Native)
-- [ ] Lista vazia → feedback (toast/alert), não abre share sheet
-
-**Formato do texto:**
-```
-🛒 Lista de Mercado
-
-🥬 Hortifruti
-⬚ Banana
-✅ Alface
-
-🥛 Laticínios
-⬚ Leite
-
-Enviado pelo app Lista de Mercado
-```
-
-**Esforço:** P (pequeno — <1 sessão). `Share.share()` nativo + formatação de string.
-**Prioridade:** Alta — razão valor/esforço excepcional (valor alto + esforço mínimo + alcance amplo)
-**Dependências:** Idealmente após Categorização por Setores (para agrupar por categoria no texto), mas pode ser implementada sem.
-
-### [ALTA] Estimativa de Custo com Banco de Dados Pessoal de Preços
-**Dor:** Usuário não sabe quanto vai gastar antes de ir ao mercado. Sem campo de quantidade, a lista é só uma lista de nomes. Sem histórico de preços, não consegue planejar orçamento nem perceber variações de preço ao longo do tempo.
-
-**Análise de mercado:** Listonic e Out of Milk permitem preço manual por item. Price Book e PricePad exigem digitar preço item a item. **Nenhum concorrente** usa foto de nota fiscal para alimentar banco de dados pessoal de preços automaticamente. Diferencial real do app — combina IA (Claude Vision, ~97% de precisão em recibos) com ciclo virtuoso: quanto mais compra, melhor a estimativa.
-
-**Público impactado:** Todos os usuários — qualquer pessoa que compra em mercado recebe NFC-e. Ciclo natural: comprou → foto da nota → próxima lista já tem estimativa.
-
-**Abordagem em 3 fases:**
-
-#### Fase 1 — Quantidade e Unidade por Item (P, <1 sessão)
-- [ ] Campos opcionais `quantity` (número, default 1) e `unit` (un/kg/L/g/ml) no tipo `Item`
-- [ ] UI: edição inline de quantidade e unidade no card do item
-- [ ] Texto compartilhado (share) inclui quantidade/unidade quando preenchido (ex: "⬚ Arroz (2kg)")
-- [ ] Retrocompatível — itens existentes funcionam sem esses campos
-
-#### Fase 2 — Scan de Nota Fiscal + Banco de Preços (G, 3+ sessões)
-- [ ] Botão "Registrar Compra" (foto da NFC-e) — reutiliza infra de câmera/galeria existente
-- [ ] Claude Vision extrai itens da nota fiscal com: nome, quantidade, unidade, valor unitário, valor total
-- [ ] Modal de revisão dos itens extraídos (reutiliza padrão do PhotoReviewModal)
-- [ ] Persiste histórico de preços por item normalizado (AsyncStorage, chave `@historico_precos`)
-- [ ] Modelo: `{ itemName: string, price: number, unit: string, quantity: number, date: string, store?: string }`
-- [ ] Match fuzzy entre nome do item na nota e nome na lista (ex: "BANANA PRATA KG" → "Banana")
-- [ ] **Nudge contextual:** quando todos os itens da lista estiverem marcados como comprados, exibir banner/card sugerindo ao usuário tirar foto da nota fiscal para registrar os gastos (ex: "Compras feitas! Quer tirar foto da nota fiscal? Assim estimamos o custo da próxima lista 📸"). Deve ser dispensável e não bloquear o uso.
-- [ ] Usuário pode dispensar o nudge (não exibir novamente naquela sessão)
-
-#### Fase 3 — Estimativa Automática de Custo (M, 1-2 sessões)
-- [ ] Ao adicionar item na lista, busca último preço no histórico pessoal e preenche `price` automaticamente
-- [ ] Total estimado da lista no header (soma de `price × quantity` dos itens com preço)
-- [ ] Itens sem preço no histórico mostram "—" e não entram no total
-- [ ] Indicador visual de confiança (ex: "baseado em 5 compras" vs. "primeira compra")
-- [ ] Campo `price` editável manualmente (override da estimativa)
-
-**Fora do MVP:** comparação entre supermercados, gráfico de evolução de preço, alerta de preço acima da média, leitura do QR code da NFC-e (em vez de foto).
-
-**Esforço total:** G (grande — 3+ sessões somando as 3 fases). Mas cada fase entrega valor independente.
-**Prioridade:** Alta — diferencial de mercado real (nenhum concorrente faz), ciclo virtuoso de dados, viabilidade técnica comprovada (Claude Vision já é usado no app + ~97% precisão em recibos).
-**Dependências:** Fase 1 não tem dependências. Fase 2 depende de Fase 1. Fase 3 depende de Fase 2.
+**Esforço:** M (1-2 sessões + tempo de revisão das lojas)
+**Dependências:** Backend proxy de API.
 
 ### [MÉDIA] Salvar Listas e Histórico de Compras
 **Dor:** Lista única e efêmera — ao terminar as compras, tudo desaparece. ~70% dos itens de mercado são recorrentes, mas o usuário recria a lista toda semana. Não consegue consultar compras passadas nem reutilizar listas temáticas (churrasco, festa, compras do mês).
@@ -117,10 +48,19 @@ Enviado pelo app Lista de Mercado
 **Fora do MVP:** múltiplas listas ativas simultâneas, templates, sugestão automática de itens frequentes, busca no histórico.
 
 **Esforço:** G (grande — 3+ sessões). Requer React Navigation (app é single-screen hoje), novo modelo de dados, migração de AsyncStorage, nova tela completa.
-**Prioridade:** Média — valor real mas esforço alto. Melhor razão valor/esforço implementando após Compartilhar Lista e quando navegação multi-tela já existir.
-**Dependências:** Categorização por Setores (listas salvas devem preservar categorias). Introdução de React Navigation como pré-requisito técnico.
+**Prioridade:** Média — valor real mas esforço alto.
+**Dependências:** Introdução de React Navigation como pré-requisito técnico.
+
+### [BAIXA] Evoluções do banco de preços (fora do MVP da estimativa)
+Comparação entre supermercados, gráfico de evolução de preço, alerta de preço acima da média, leitura do QR code da NFC-e (em vez de foto), atualização automática dos preços da lista atual ao registrar uma nota.
 
 ## Concluído
+- [2026-06] **Fase 3 — Estimativa Automática de Custo:** preço estimado do histórico ao adicionar item (texto, foto e áudio), total estimado no header, match fuzzy de nomes ("Banana" ↔ "Banana Prata"), edição manual de preço com indicador de confiança ("baseado em N compras"), total estimado no texto compartilhado
+- [2026-06] Configuração iOS para distribuição (bundleIdentifier + permissões de câmera/galeria/microfone em português)
+- [2026-05] Fase 2 — Scan de Nota Fiscal + Banco de Preços pessoal (`@historico_precos`)
+- [2026-05] Fase 1 — Quantidade e Unidade por item
+- [2026-04] Categorização por Setores do Mercado (10 categorias, auto-categorização via Claude, SectionList)
+- [2026-04] Compartilhar Lista via WhatsApp / Share Sheet
 - [v1.0.0] Lista de compras com adicionar/marcar/deletar
 - [v1.0.0] Importação por foto (Claude Vision)
 - [v1.0.0] Importação por áudio (Whisper + Claude)

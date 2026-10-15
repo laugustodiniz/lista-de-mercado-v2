@@ -47,7 +47,12 @@ const COLORS = {
   inputBg: '#F4F2EF',
   gradientStart: '#4ECDC4',
   gradientEnd: '#44B09E',
+  price: '#E67E22',
 };
+
+function formatBRL(value: number): string {
+  return `R$ ${value.toFixed(2).replace('.', ',')}`;
+}
 
 export default function App() {
   const [items, setItems] = useState<Item[]>([]);
@@ -61,12 +66,15 @@ export default function App() {
   const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
   const [receiptReviewVisible, setReceiptReviewVisible] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editPriceValue, setEditPriceValue] = useState('');
+  const [priceEstimateCount, setPriceEstimateCount] = useState<number | null>(null);
 
   const { scanFromGallery, scanFromCamera, isLoading: photoLoading } = usePhotoScanner();
   const { startRecording, stopRecording, isRecording, isLoading: audioLoading, recordingDuration } = useAudioScanner();
   const { categorize, isLoading: categorizerLoading } = useCategorizer();
   const { scanReceiptFromGallery, scanReceiptFromCamera, isLoading: receiptLoading } = useReceiptScanner();
-  const { saveReceipt } = usePriceHistory();
+  const { saveReceipt, getPriceEstimate } = usePriceHistory();
 
   useEffect(() => {
     loadItems();
@@ -104,7 +112,8 @@ export default function App() {
     Keyboard.dismiss();
     setInput('');
     const category = await categorize(name);
-    const newItem = { id: Date.now().toString(), name, bought: false, category };
+    const estimate = await getPriceEstimate(name);
+    const newItem: Item = { id: Date.now().toString(), name, bought: false, category, price: estimate?.price };
     setItems(prev => {
       const newItems = [...prev, newItem];
       saveItems(newItems);
@@ -112,16 +121,20 @@ export default function App() {
     });
   }
 
-  function addMultipleItems(categorizedItems: CategorizedItem[]) {
+  async function addMultipleItems(categorizedItems: CategorizedItem[]) {
     if (categorizedItems.length === 0) return;
+    const estimates = await Promise.all(
+      categorizedItems.map(ci => getPriceEstimate(ci.name))
+    );
     const now = Date.now();
-    const newItems = [
+    const newItems: Item[] = [
       ...items,
       ...categorizedItems.map((ci, i) => ({
         id: (now + i).toString(),
         name: ci.name,
         bought: false,
         category: ci.category,
+        price: estimates[i]?.price,
       })),
     ];
     setItems(newItems);
@@ -163,6 +176,7 @@ export default function App() {
     if (editingQuantityId && editingQuantityId !== item.id) {
       confirmQuantityEdit();
     }
+    if (editingPriceId) confirmPriceEdit();
     setEditingQuantityId(item.id);
     setEditQtyValue(item.quantity !== undefined ? item.quantity.toString() : '1');
     setEditUnitValue(item.unit ?? 'un');
@@ -182,6 +196,41 @@ export default function App() {
   function removeQuantity(id: string) {
     updateItemDetails(id, undefined, undefined);
     setEditingQuantityId(null);
+  }
+
+  function updateItemPrice(id: string, price: number | undefined) {
+    const newItems = items.map(item =>
+      item.id === id ? { ...item, price } : item
+    );
+    setItems(newItems);
+    saveItems(newItems);
+  }
+
+  function startEditingPrice(item: Item) {
+    if (editingQuantityId) confirmQuantityEdit();
+    if (editingPriceId && editingPriceId !== item.id) confirmPriceEdit();
+    setEditingPriceId(item.id);
+    setEditPriceValue(item.price != null ? item.price.toFixed(2).replace('.', ',') : '');
+    setPriceEstimateCount(null);
+    getPriceEstimate(item.name).then(estimate => {
+      setPriceEstimateCount(estimate?.count ?? 0);
+      if (item.price == null && estimate) {
+        setEditPriceValue(estimate.price.toFixed(2).replace('.', ','));
+      }
+    });
+  }
+
+  function confirmPriceEdit() {
+    if (!editingPriceId) return;
+    const parsed = parseFloat(editPriceValue.replace(',', '.'));
+    const valid = editPriceValue !== '' && !isNaN(parsed) && parsed > 0;
+    updateItemPrice(editingPriceId, valid ? parsed : undefined);
+    setEditingPriceId(null);
+  }
+
+  function removePrice(id: string) {
+    updateItemPrice(id, undefined);
+    setEditingPriceId(null);
   }
 
   async function handleScanPhoto() {
@@ -316,6 +365,12 @@ export default function App() {
       lines.push('');
     }
 
+    const pricedItems = listItems.filter(i => i.price != null);
+    if (pricedItems.length > 0) {
+      const total = pricedItems.reduce((sum, i) => sum + i.price! * (i.quantity ?? 1), 0);
+      lines.push(`💰 Total estimado: ${formatBRL(total)}`, '');
+    }
+
     lines.push('Enviado pelo app Lista de Mercado');
     return lines.join('\n');
   }
@@ -338,6 +393,12 @@ export default function App() {
     ? 'Categorizando item...'
     : 'Analisando imagem...';
   const showNudge = items.length > 0 && pending === 0 && !nudgeDismissed;
+
+  const pricedCount = items.filter(i => i.price != null).length;
+  const estimatedTotal = items.reduce(
+    (sum, i) => (i.price != null ? sum + i.price * (i.quantity ?? 1) : sum),
+    0
+  );
 
   const sections = CATEGORY_ORDER
     .map(category => ({
@@ -382,6 +443,15 @@ export default function App() {
                 {pending} {pending === 1 ? 'item' : 'itens'} pendente{pending !== 1 ? 's' : ''}
               </Text>
             </View>
+            {pricedCount > 0 && (
+              <View style={styles.badge}>
+                <Ionicons name="cash-outline" size={14} color="#fff" />
+                <Text style={styles.badgeText}>
+                  ≈ {formatBRL(estimatedTotal)}
+                  {pricedCount < items.length ? ` (${pricedCount}/${items.length})` : ''}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </LinearGradient>
@@ -419,12 +489,14 @@ export default function App() {
           renderItem={({ item }) => {
             const catConfig = CATEGORY_CONFIG[item.category];
             const isEditingQty = editingQuantityId === item.id;
+            const isEditingPrice = editingPriceId === item.id;
+            const isEditing = isEditingQty || isEditingPrice;
             return (
               <View>
                 <Pressable
-                  style={({ pressed }) => [styles.itemRow, isEditingQty && styles.itemRowEditing, pressed && !isEditingQty && styles.itemRowPressed]}
-                  onPress={() => { if (!isEditingQty) toggleItem(item.id); }}
-                  onLongPress={() => { if (!isEditingQty) setEditCategoryItem(item); }}
+                  style={({ pressed }) => [styles.itemRow, isEditing && styles.itemRowEditing, pressed && !isEditing && styles.itemRowPressed]}
+                  onPress={() => { if (!isEditing) toggleItem(item.id); }}
+                  onLongPress={() => { if (!isEditing) setEditCategoryItem(item); }}
                 >
                   <Ionicons
                     name={item.bought ? 'checkmark-circle' : 'ellipse-outline'}
@@ -468,6 +540,25 @@ export default function App() {
                           <Text style={styles.addQuantityText}>qtd</Text>
                         </Pressable>
                       )}
+                      {item.price != null ? (
+                        <Pressable
+                          onPress={() => startEditingPrice(item)}
+                          style={styles.priceBadge}
+                          hitSlop={4}
+                        >
+                          <Ionicons name="pricetag-outline" size={10} color={COLORS.price} />
+                          <Text style={styles.priceBadgeText}>{formatBRL(item.price)}</Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() => startEditingPrice(item)}
+                          style={styles.addQuantityBtn}
+                          hitSlop={4}
+                        >
+                          <Ionicons name="add-circle-outline" size={10} color={COLORS.textMuted} />
+                          <Text style={styles.addQuantityText}>R$</Text>
+                        </Pressable>
+                      )}
                     </View>
                   </View>
                   <Pressable
@@ -508,6 +599,36 @@ export default function App() {
                     </Pressable>
                     {item.quantity != null && (
                       <Pressable onPress={() => removeQuantity(item.id)} style={styles.removeQtyBtn} hitSlop={4}>
+                        <Ionicons name="close-circle" size={28} color={COLORS.danger} />
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+                {isEditingPrice && (
+                  <View style={styles.quantityEditRow}>
+                    <Text style={styles.pricePrefix}>R$</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={editPriceValue}
+                      onChangeText={setEditPriceValue}
+                      keyboardType="decimal-pad"
+                      placeholder="0,00"
+                      placeholderTextColor={COLORS.textMuted}
+                      autoFocus
+                      selectTextOnFocus
+                    />
+                    <Text style={styles.priceHint} numberOfLines={2}>
+                      {priceEstimateCount === null
+                        ? 'Buscando histórico...'
+                        : priceEstimateCount === 0
+                        ? 'Sem histórico de compras'
+                        : `Baseado em ${priceEstimateCount} ${priceEstimateCount === 1 ? 'compra' : 'compras'}`}
+                    </Text>
+                    <Pressable onPress={confirmPriceEdit} style={styles.confirmQtyBtn} hitSlop={4}>
+                      <Ionicons name="checkmark-circle" size={28} color={COLORS.primary} />
+                    </Pressable>
+                    {item.price != null && (
+                      <Pressable onPress={() => removePrice(item.id)} style={styles.removeQtyBtn} hitSlop={4}>
                         <Ionicons name="close-circle" size={28} color={COLORS.danger} />
                       </Pressable>
                     )}
@@ -670,6 +791,7 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
+    gap: 8,
   },
   badge: {
     flexDirection: 'row',
@@ -811,6 +933,40 @@ const styles = StyleSheet.create({
   addQuantityText: {
     fontSize: 10,
     fontWeight: '500',
+    color: COLORS.textMuted,
+  },
+  priceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.price + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3,
+  },
+  priceBadgeText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: COLORS.price,
+  },
+  pricePrefix: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textLight,
+  },
+  priceInput: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
+    color: COLORS.text,
+    width: 80,
+    textAlign: 'center',
+  },
+  priceHint: {
+    flex: 1,
+    fontSize: 11,
     color: COLORS.textMuted,
   },
   itemRowEditing: {

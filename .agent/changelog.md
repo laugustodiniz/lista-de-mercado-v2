@@ -2,6 +2,21 @@
 
 ## Em andamento
 
+### Fase 3 — Estimativa Automática de Custo
+- Campo opcional `price?: number` (preço unitário em R$) no tipo `Item`
+- Tipo `PriceEstimate` (price, unit, date, store?, count) em `constants/types.ts`
+- `usePriceHistory`: `getLastPrice` substituída por `getPriceEstimate` com match fuzzy de nomes — normalização de acentos/plural + match por tokens ("Banana" casa com "Banana Prata")
+- Ao adicionar item (texto, foto ou áudio), busca preço no histórico pessoal e preenche automaticamente
+- Total estimado no header (`≈ R$ X,XX`), com cobertura `(itens com preço/total)` quando parcial
+- Badge de preço no card do item (tap abre editor inline); botão "+ R$" quando sem preço
+- Editor inline de preço com indicador de confiança ("Baseado em N compras" / "Sem histórico")
+- Preço editável manualmente (override da estimativa) e removível
+- Texto compartilhado inclui linha "💰 Total estimado: R$ X,XX"
+
+### Preparação para iOS e distribuição
+- `bundleIdentifier` iOS adicionado ao `app.json` (com.laugustodiniz.listademercadoapp)
+- Config plugins `expo-image-picker` e `expo-av` com strings de permissão em português (câmera, galeria, microfone) — exigência da App Store
+
 ### Fase 2 — Scan de Nota Fiscal + Banco de Preços (Estimativa de Custo)
 - Tipo `ReceiptItem` (nome, originalName, quantity, unit, unitPrice, totalPrice, category) em `constants/types.ts`
 - Tipo `PriceRecord` (id, itemName, price, unit, quantity, date, store?) em `constants/types.ts`
